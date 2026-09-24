@@ -1,0 +1,28 @@
+# Environment & Virtual Environments
+.env
+.venv/
+venv/
+env/
+
+# Python cache & artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.dist/
+build/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Data files (do not commit datasets)
+ml/data/raw/*
+!ml/data/raw/.gitkeep
+ml/data/processed/*
+!ml/data/processed/.gitkeep
