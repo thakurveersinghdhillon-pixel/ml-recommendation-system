@@ -29,7 +29,69 @@ Phase 2 focuses on data cleaning, transformation, statistical summary computatio
 * **Exploded Genre Analytics**: Computed per-genre movie counts, total rating counts, and average ratings without double-counting unique movies.
 * **User-Item Matrix & Sparsity**: Constructed a pivoted user-item matrix (`610` users x `9,742` movies) preserving `NaN` for unobserved interactions. Computed exact matrix sparsity (**98.30%**).
 * **EDA Visualizations**: Generated 8 publication-quality plots in `ml/data/processed/eda/`.
-* **Automated Test Suite**: Added 9 new unit tests (22 total tests passing) verifying preprocessing, statistics calculation, matrix construction, zero-rating preservation, and sparsity math.
+* **Automated Test Suite**: Added 9 new unit tests verifying preprocessing, statistics calculation, matrix construction, zero-rating preservation, and sparsity math.
+
+---
+
+## Phase 3 — Content-Based Recommendation System
+
+Phase 3 implements a production-quality, modular, testable, and explainable **Content-Based Movie Recommendation Engine** (`ContentBasedRecommender`).
+
+### What is Content-Based Recommendation?
+Content-based recommendation suggests items to users by evaluating similarity between item metadata features rather than relying on user rating behavior. In this system, recommendations are computed by comparing textual metadata representation of movies.
+
+### Features Used
+* **Movie Title**: Cleaned text tokens from movie titles.
+* **Movie Genres**: Genre descriptors (`Adventure`, `Animation`, `Children`, `Comedy`, `Fantasy`, etc.).
+
+### Mathematical Methodology
+
+#### 1. TF-IDF (Term Frequency – Inverse Document Frequency)
+TF-IDF converts unstructured movie metadata text into high-dimensional numerical feature vectors:
+$$\text{TF-IDF}(t, d, D) = \text{TF}(t, d) \times \text{IDF}(t, D)$$
+* **Term Frequency ($\text{TF}$)**: Measures how frequently token $t$ appears in movie document $d$.
+* **Inverse Document Frequency ($\text{IDF}$)**: Down-weights common words across all movies $D$ and emphasizes distinctive genre/title descriptors.
+
+#### 2. Cosine Similarity
+To evaluate similarity between two movie feature vectors $\vec{A}$ and $\vec{B}$, we calculate the cosine of the angle between them:
+$$\text{Similarity}(\vec{A}, \vec{B}) = \cos(\theta) = \frac{\vec{A} \cdot \vec{B}}{\|\vec{A}\| \|\vec{B}\|}$$
+Cosine similarity ranges from `0.0` (completely orthogonal/dissimilar) to `1.0` (identical content direction).
+
+### Recommendation Pipeline
+```text
+Movie Catalog Metadata (title, genres)
+          ↓
+Content Text Representation ("toy story adventure animation children comedy fantasy")
+          ↓
+TF-IDF Vectorization (scikit-learn TfidfVectorizer)
+          ↓
+Pairwise Cosine Similarity Matrix (9,742 x 9,742)
+          ↓
+Title Normalization & Lookup
+          ↓
+Exclude Query Source Movie & Rank Candidates (Similarity DESC, movieId ASC)
+          ↓
+Top-K Recommendation Items & Metadata-Grounded Explanations
+```
+
+### Key Accomplishments in Phase 3
+* **Modular Recommender Module**: Implemented `ContentBasedRecommender` in `ml/src/content_based.py` with `fit()`, `get_movie_index()`, `get_similarity()`, `recommend()`, and `explain_recommendation()`.
+* **Deterministic Title Lookup & Duplicates**: Normalizes case and whitespace; deterministically resolves duplicate titles (first occurrence in catalog wins).
+* **Metadata-Grounded Explanations**: Generates factual, deterministic explanations reporting shared genres and actual cosine similarity scores (no LLM dependence).
+* **Robust Edge Case Handling**: Explicit validation for unknown movies, empty titles, invalid $N \le 0$, missing/empty genres, and $N > \text{catalog size}$.
+* **Comprehensive Test Suite**: Added 23 unit tests in `ml/tests/test_content_based.py` (total 45 tests passing).
+
+### Advantages & Limitations of Content-Based Filtering
+
+#### Advantages:
+1. **Solves Item Cold-Start**: Can immediately recommend new or unrated movies as long as metadata (genres, title) is available.
+2. **High Interpretability**: Explanations can explicitly point to shared attributes (e.g. shared genres `"Adventure"`, `"Animation"`).
+3. **No User Inter-dependency**: Recommendations do not depend on other users' interaction data.
+
+#### Limitations:
+1. **Over-Specialization**: Tends to recommend items very similar to the query movie (lack of serendipity).
+2. **Metadata Dependency**: Quality of recommendations is bound by the richness and accuracy of metadata.
+3. **Ignores Collaborative Signals**: Does not capture user preference patterns or rating sentiment.
 
 ---
 
@@ -50,9 +112,6 @@ Phase 2 focuses on data cleaning, transformation, statistical summary computatio
 | **Possible Interactions** | `5,942,620` |
 | **Matrix Sparsity** | **`98.30%`** |
 | **Matrix Density** | **`1.70%`** |
-
-### Why Sparsity Matters for Collaborative Filtering
-A matrix sparsity of **98.30%** means that **98.3% of all possible user-movie interactions are unobserved (missing)**. Only 1.70% of potential ratings exist in the dataset. This high degree of sparsity is a fundamental characteristic of recommendation systems. It highlights why naive similarity calculations (e.g. raw dot products) fail on unobserved entries, and motivates model-based collaborative filtering (such as Matrix Factorization / SVD) and hybrid content-based filtering to address the "cold-start" problem.
 
 ---
 
@@ -87,15 +146,18 @@ ML project/
 │   │   ├── data_loader.py      # MovieLens dataset loading functions
 │   │   ├── data_validator.py   # Dataset schema & integrity validation
 │   │   ├── preprocessing.py    # Movie, rating, and genre preprocessing
-│   │   └── eda.py              # Statistical aggregations & plot generation
+│   │   ├── eda.py              # Statistical aggregations & plot generation
+│   │   └── content_based.py    # Content-Based Recommender (TF-IDF & Cosine Similarity)
 │   ├── scripts/
 │   │   ├── load_dataset.py     # Phase 1 loader & validator script
-│   │   └── run_eda.py          # Phase 2 preprocessing & EDA pipeline script
+│   │   ├── run_eda.py          # Phase 2 preprocessing & EDA pipeline script
+│   │   └── test_content_recommender.py # Phase 3 Content Recommender manual test script
 │   ├── tests/
 │   │   ├── __init__.py
-│   │   ├── test_data_loader.py    # Unit tests for data loading
-│   │   ├── test_data_validator.py # Unit tests for data validation
-│   │   └── test_preprocessing.py  # Unit tests for preprocessing & EDA
+│   │   ├── test_data_loader.py    # Unit tests for data loading (Phase 1)
+│   │   ├── test_data_validator.py # Unit tests for data validation (Phase 1)
+│   │   ├── test_preprocessing.py  # Unit tests for preprocessing & EDA (Phase 2)
+│   │   └── test_content_based.py  # Unit tests for content recommender (Phase 3)
 │   └── requirements.txt        # Pinned Python ML dependencies
 ├── docs/
 ├── .env.example                # Example environment variables
@@ -127,18 +189,18 @@ python -m venv .venv
 pip install -r ml/requirements.txt
 ```
 
-### 3. Run Data Preprocessing & EDA Pipeline
+### 3. Run Content-Based Recommender Verification Script
 
 ```bash
-python3 ml/scripts/run_eda.py
+python3 ml/scripts/test_content_recommender.py
 ```
 
-Outputs processed CSVs into `ml/data/processed/` and 8 plots into `ml/data/processed/eda/`.
+Loads processed movies, fits TF-IDF recommender, outputs top 10 recommendations for `"Toy Story (1995)"`, and demonstrates explanations and error handling.
 
-### 4. Run Test Suite
+### 4. Run Full Automated Test Suite
 
 ```bash
 python3 -m pytest ml/tests/
 ```
 
-Executes all 22 unit tests across data loading, schema validation, preprocessing, user/movie statistics, interaction matrix construction, and sparsity math.
+Executes all 45 unit tests across Phase 1, Phase 2, and Phase 3.
