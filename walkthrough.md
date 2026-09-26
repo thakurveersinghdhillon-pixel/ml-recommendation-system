@@ -1,6 +1,6 @@
 # Hybrid ML Recommendation System — Comprehensive Project Walkthrough
 
-This document provides a beginner-friendly, technical walkthrough of the **Hybrid ML Recommendation System**, covering Phase 1 (Data Environment & Validation), Phase 2 (Preprocessing & EDA), and Phase 3 (Content-Based Recommendation System).
+This document provides a beginner-friendly, technical walkthrough of the **Hybrid ML Recommendation System**, covering Phase 1 (Data Environment & Validation), Phase 2 (Preprocessing & EDA), Phase 3 (Content-Based Recommendation System), and Phase 4 (Collaborative Filtering).
 
 ---
 
@@ -42,72 +42,75 @@ Phase 1 established a clean, modular Python environment separating configuration
 Content-based recommendation generates recommendations by analyzing item attributes (metadata) rather than user rating behaviors. When a user queries a movie (e.g. *Toy Story (1995)*), the engine computes similarity scores against all other movies in the catalog using their textual metadata representation.
 
 ### Architecture & Pipeline Steps
-
 ```text
-Movie Catalog Metadata (title, genres)
-          ↓
-Prepare Text Content ("toy story adventure animation children comedy fantasy")
-          ↓
-TF-IDF Feature Matrix Construction (scikit-learn TfidfVectorizer)
-          ↓
-Pairwise Cosine Similarity Matrix (9,742 x 9,742)
-          ↓
-Title Lookup & Normalization (Case-insensitive & strip whitespace)
-          ↓
-Exclusion & Ranking (Exclude query movie, sort by similarity DESC, movieId ASC)
-          ↓
-Top-N Recommendation Output + Metadata-Grounded Explanations
+Movie Catalog Metadata (title, genres) → Text Content Representation → TF-IDF Vectorization → Cosine Similarity Matrix → Rank & Exclude Query Movie → Top-N Recommendations + Explanations
 ```
 
 ### Feature Engineering & Text Representation
-The content representation combines the cleaned title and genres into a single token string:
-* Title `"Toy Story (1995)"` -> `"toy story"`
-* Genres `"Adventure|Animation|Children|Comedy|Fantasy"` -> `"adventure animation children comedy fantasy"`
-* Combined text: `"toy story adventure animation children comedy fantasy"`
-
-If a movie has `"(no genres listed)"` or missing genres, it is handled as an empty string without crashing.
+The content representation combines the cleaned title and genres into a single token string (`"toy story adventure animation children comedy fantasy"`). Missing genres are handled as empty strings without crashing.
 
 ### TF-IDF & Cosine Similarity Mathematics
+* **TF-IDF**: $\text{TF-IDF}(t, d, D) = \text{TF}(t, d) \times \text{IDF}(t, D)$
+* **Cosine Similarity**: $\text{Similarity}(\vec{A}, \vec{B}) = \frac{\vec{A} \cdot \vec{B}}{\|\vec{A}\| \|\vec{B}\|}$
 
-#### TF-IDF Vectorization
-$$\text{TF-IDF}(t, d, D) = \text{TF}(t, d) \times \text{IDF}(t, D)$$
-* $\text{TF}(t, d)$: Term frequency of word $t$ in movie text $d$.
-* $\text{IDF}(t, D) = \log \frac{|D|}{|\{d \in D : t \in d\}|}$: Inverse document frequency, reducing the weight of common words and highlighting specific genre/title keywords.
+---
 
-#### Cosine Similarity
-Pairwise similarity between two movie vectors $\vec{A}$ and $\vec{B}$:
-$$\text{Similarity}(\vec{A}, \vec{B}) = \frac{\vec{A} \cdot \vec{B}}{\|\vec{A}\| \|\vec{B}\|}$$
-* Score = `1.0`: Identical content feature direction (same movie or identical metadata).
-* Score = `0.0`: Completely orthogonal / no shared terms or genres.
+## 4. Phase 4 — Collaborative Filtering
 
-### Deterministic Title Lookup & Duplicate Handling
-* Title strings are normalized by trimming whitespace and converting to lowercase:
-  `"  TOY STORY (1995) "` -> `"toy story (1995)"`.
-* If duplicate normalized titles exist in the dataset, the recommender deterministically maps to the **first occurrence** in catalog dataset order.
+### Concept & Overview
+Collaborative filtering generates recommendations by examining how users rate items across the dataset. Rather than relying on textual metadata (titles, genres), Item-Based Collaborative Filtering represents movies as rating vectors across all users and identifies movies with similar rating patterns.
 
-### Recommendation Sorting & Ranking Strategy
-* Candidates are sorted using a deterministic two-key strategy:
-  1. Primary key: `similarity_score` **DESCENDING**
-  2. Secondary key (tie-breaker): `movieId` **ASCENDING**
-* The query movie itself is strictly excluded from recommendation results.
+```text
+Movie A Rating Vector: [5, 4, 5, 0, 0]
+Movie B Rating Vector: [4, 5, 4, 0, 0]
+             ↓
+High Cosine Similarity between User Rating Patterns
+             ↓
+Movies A and B are Collaboratively Similar
+```
 
-### Explanation Support (`explain_recommendation`)
-Explanations are generated deterministically from actual metadata evidence (no LLM dependence):
-* Compares `genres` sets between source and recommended movies.
-* Reports exact shared genres and the calculated cosine similarity score.
+### Sparse User-Item Matrix Representation
+The user interaction dataset is represented using a Scipy CSR sparse matrix `user_item_matrix` of shape $(610 \text{ users} \times 9,742 \text{ movies})$.
+* Rows: `userId` (mapped 0 to $U-1$).
+* Columns: `movieId` (mapped 0 to $M-1$).
+* Values: User rating values ($0.5$ to $5.0$).
+* Unobserved entries are preserved as sparse zeros without allocating memory.
+* Duplicate `(userId, movieId)` pairs are aggregated deterministically using mean rating.
 
-> **Example**:
-> *"Recommended 'Toy Story 2 (1999)' because it shares 5 genre(s) ('Adventure', 'Animation', 'Children', 'Comedy', 'Fantasy') with 'Toy Story (1995)'. Content similarity score: 0.7337."*
+### Item-Item Cosine Similarity Calculation
+The similarity between movie $i$ and movie $j$ is calculated as the cosine similarity between their user rating column vectors:
+$$S_{i, j} = \frac{\vec{v}_i \cdot \vec{v}_j}{\|\vec{v}_i\|_2 \|\vec{v}_j\|_2}$$
+The item similarity matrix $S \in \mathbb{R}^{9,742 \times 9,742}$ is stored as dense `float32` requiring $\approx \mathbf{380 \text{ MB}}$ of memory.
 
-### Edge Case Handling Summary
-| Edge Case | Handled Behavior |
-| :--- | :--- |
-| **Unknown Movie Title** | Raises `ValueError("Movie '...' not found in dataset catalog.")` |
-| **Empty Movie Title String** | Raises `ValueError("Movie title must be a non-empty string.")` |
-| **Invalid $N \le 0$** | Raises `ValueError("n must be a positive integer...")` |
-| **$N > \text{Catalog Size}$** | Gracefully caps results to total available candidates without crashing |
-| **Missing / Empty Genres** | Handled safely using empty genre sets, content text falls back to cleaned title |
-| **Duplicate Titles** | First occurrence in dataset index order is selected deterministically |
+### Normalized Mean-Centered Recommendation Scoring
+To compute recommendations for user $u$, we evaluate candidate unrated movies $c$ using the normalized mean-centered formula:
 
-### Trade-offs & Hybrid System Preparation
-While content-based filtering excels at solving **item cold-start** (recommending new movies with 0 ratings) and providing **high interpretability**, it cannot capture user-user rating preferences or serendipitous discoveries. In future phases, this module will serve as a foundational component of the **Hybrid Recommendation System**.
+$$\text{Score}(u, c) = \frac{\sum_{i \in \text{Rated}(u)} [S_{i, c} \times (r_{u, i} - \bar{r}_u)]}{\sum_{i \in \text{Rated}(u)} |S_{i, c}| + \epsilon}$$
+
+1. **Mean-Centering ($r_{u, i} - \bar{r}_u$)**:
+   - If user $u$ rated movie $i$ **above** their average rating $\bar{r}_u$ (e.g. rated 5.0 when mean is 3.5), it acts as a **positive signal** (+1.5), boosting candidates similar to $i$.
+   - If user $u$ rated movie $i$ **below** their average rating (e.g. rated 1.0 when mean is 3.5), it acts as a **negative signal** (-2.5), penalizing candidates similar to $i$.
+2. **Normalization ($\sum |S_{i, c}| + \epsilon$)**:
+   - Normalizes by total similarity weight so candidates similar to many items are not artificially inflated. $\epsilon = 10^{-9}$ prevents division by zero.
+
+### Mandatory Already-Rated Filtering
+`recommend_for_user(user_id)` explicitly excludes all movies user $u$ has already rated in the training dataset (`user_rated_movies[user_id]`). This prevents recommending movies the user has already seen and rated.
+
+### Deterministic Candidate Ranking
+* Personalized Recommendations: `score` **DESCENDING**, tie-breaker `movieId` **ASCENDING**.
+* Similar Movie Recommendations: `similarity_score` **DESCENDING**, tie-breaker `movieId` **ASCENDING**.
+
+### Collaborative Explanation Support
+`explain_user_recommendation(user_id, movie_id)` identifies the exact source movie $i$ rated by user $u$ that contributed most positively to candidate $c$'s score:
+
+$$\text{Contribution} = S_{i, c} \times (r_{u, i} - \bar{r}_u)$$
+
+> **Generated Explanation Sample**:
+> *"Recommended 'Entertaining Angels: The Dorothy Day Story (1996)' (score: 0.6336) to User 1 because User 1 rated 'Schindler's List (1993)' 5.0 (above user average of 4.37). Item-item rating similarity between 'Schindler's List (1993)' and 'Entertaining Angels: The Dorothy Day Story (1996)' is 0.0777."*
+
+### Cold-Start Limitations & Data Leakage Protection
+* **Data Leakage Protection**: The model relies **only** on the DataFrame supplied to `fit()`, enabling clean train/test evaluation in Phase 6.
+* **Cold-Start Limitations**:
+  - **Unknown User**: A user without rating history cannot receive collaborative recommendations (`ValueError` is raised).
+  - **Unknown Movie**: A movie without ratings cannot be evaluated (`ValueError` is raised).
+  - Cold-start handling will be resolved in Phase 5 by combining content-based metadata features with collaborative signals in a Hybrid Recommendation System.

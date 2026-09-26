@@ -47,51 +47,62 @@ Content-based recommendation suggests items to users by evaluating similarity be
 ### Mathematical Methodology
 
 #### 1. TF-IDF (Term Frequency – Inverse Document Frequency)
-TF-IDF converts unstructured movie metadata text into high-dimensional numerical feature vectors:
 $$\text{TF-IDF}(t, d, D) = \text{TF}(t, d) \times \text{IDF}(t, D)$$
-* **Term Frequency ($\text{TF}$)**: Measures how frequently token $t$ appears in movie document $d$.
-* **Inverse Document Frequency ($\text{IDF}$)**: Down-weights common words across all movies $D$ and emphasizes distinctive genre/title descriptors.
 
 #### 2. Cosine Similarity
-To evaluate similarity between two movie feature vectors $\vec{A}$ and $\vec{B}$, we calculate the cosine of the angle between them:
 $$\text{Similarity}(\vec{A}, \vec{B}) = \cos(\theta) = \frac{\vec{A} \cdot \vec{B}}{\|\vec{A}\| \|\vec{B}\|}$$
-Cosine similarity ranges from `0.0` (completely orthogonal/dissimilar) to `1.0` (identical content direction).
 
-### Recommendation Pipeline
+---
+
+## Phase 4 — Collaborative Filtering
+
+Phase 4 implements an **Item-Based Collaborative Filtering Engine** (`ItemBasedCollaborativeRecommender`) using user-movie rating interaction history.
+
+### What is Collaborative Filtering?
+Collaborative filtering generates recommendations by analyzing collective user interaction behavior rather than item metadata. Item-Based Collaborative Filtering represents movies as rating vectors across users and identifies similar movies based on shared user rating patterns.
+
+### Core Architectural Distinctions: Phase 3 vs. Phase 4
+
 ```text
-Movie Catalog Metadata (title, genres)
-          ↓
-Content Text Representation ("toy story adventure animation children comedy fantasy")
-          ↓
-TF-IDF Vectorization (scikit-learn TfidfVectorizer)
-          ↓
-Pairwise Cosine Similarity Matrix (9,742 x 9,742)
-          ↓
-Title Normalization & Lookup
-          ↓
-Exclude Query Source Movie & Rank Candidates (Similarity DESC, movieId ASC)
-          ↓
-Top-K Recommendation Items & Metadata-Grounded Explanations
+Phase 3 (Content-Based):
+Movie Metadata (title, genres) → TF-IDF Vectorization → Content Cosine Similarity → Content Recommendations
+
+Phase 4 (Collaborative Filtering):
+User Ratings (userId, movieId, rating) → Sparse User-Item Matrix → Rating Cosine Similarity → Normalized User Scoring → Personalized Recommendations
 ```
 
-### Key Accomplishments in Phase 3
-* **Modular Recommender Module**: Implemented `ContentBasedRecommender` in `ml/src/content_based.py` with `fit()`, `get_movie_index()`, `get_similarity()`, `recommend()`, and `explain_recommendation()`.
-* **Deterministic Title Lookup & Duplicates**: Normalizes case and whitespace; deterministically resolves duplicate titles (first occurrence in catalog wins).
-* **Metadata-Grounded Explanations**: Generates factual, deterministic explanations reporting shared genres and actual cosine similarity scores (no LLM dependence).
-* **Robust Edge Case Handling**: Explicit validation for unknown movies, empty titles, invalid $N \le 0$, missing/empty genres, and $N > \text{catalog size}$.
-* **Comprehensive Test Suite**: Added 23 unit tests in `ml/tests/test_content_based.py` (total 45 tests passing).
+> **Metadata Independence**: Item-item collaborative similarity is calculated **strictly using user rating vectors** ($R_{u, i}$). Movie titles and genres are never used to compute collaborative similarity.
 
-### Advantages & Limitations of Content-Based Filtering
+### Mathematical Methodology
 
-#### Advantages:
-1. **Solves Item Cold-Start**: Can immediately recommend new or unrated movies as long as metadata (genres, title) is available.
-2. **High Interpretability**: Explanations can explicitly point to shared attributes (e.g. shared genres `"Adventure"`, `"Animation"`).
-3. **No User Inter-dependency**: Recommendations do not depend on other users' interaction data.
+#### 1. Sparse User-Item Matrix
+The user interaction history is stored in a Scipy CSR sparse matrix $R \in \mathbb{R}^{U \times M}$ ($610 \text{ users} \times 9,742 \text{ movies}$). Unobserved interactions remain sparse zeros in memory. Duplicate `(userId, movieId)` pairs are aggregated deterministically using mean rating.
 
-#### Limitations:
-1. **Over-Specialization**: Tends to recommend items very similar to the query movie (lack of serendipity).
-2. **Metadata Dependency**: Quality of recommendations is bound by the richness and accuracy of metadata.
-3. **Ignores Collaborative Signals**: Does not capture user preference patterns or rating sentiment.
+#### 2. Item-Item Cosine Similarity
+Pairwise similarity between movie rating column vectors $\vec{v}_i$ and $\vec{v}_j$:
+$$S_{i, j} = \frac{\vec{v}_i \cdot \vec{v}_j}{\|\vec{v}_i\|_2 \|\vec{v}_j\|_2}$$
+The full item-item similarity matrix $S \in \mathbb{R}^{9,742 \times 9,742}$ stored in `float32` requires $\approx \mathbf{380 \text{ MB}}$ of memory, which is lightweight and fast for the MovieLens-small dataset.
+
+#### 3. Normalized Preference Scoring Formula
+To generate recommendations for user $u$, the engine calculates normalized preference scores for all unrated candidate movies $c$:
+$$\text{Score}(u, c) = \frac{\sum_{i \in \text{Rated}(u)} [S_{i, c} \times (r_{u, i} - \bar{r}_u)]}{\sum_{i \in \text{Rated}(u)} |S_{i, c}| + \epsilon}$$
+* **Mean-Centering ($r_{u, i} - \bar{r}_u$)**: Ratings above user average $\bar{r}_u$ act as **positive preference signals**, while ratings below average act as **negative signals**.
+* **Normalization ($\sum |S_{i, c}| + \epsilon$)**: Prevents bias toward candidates that have high similarity to many rated items regardless of user sentiment. $\epsilon = 10^{-9}$ prevents division by zero.
+
+#### 4. Mandatory Already-Rated Filtering
+When calling `recommend_for_user(user_id)`, all movies already rated by user $u$ in the training set are strictly filtered out from the final recommendations.
+
+#### 5. Deterministic Candidate Ranking
+- **Personalized User Recommendations**: Primary sort by `score` **DESCENDING**, secondary sort by `movieId` **ASCENDING**.
+- **Similar Movie Recommendations**: Primary sort by `similarity_score` **DESCENDING**, secondary sort by `movieId` **ASCENDING**.
+
+#### 6. Data Leakage Protection
+The model relies **exclusively** on the DataFrame supplied to `fit(ratings_df, movies_df=None)` without internally reloading full datasets, enabling clean train/test evaluation in Phase 6.
+
+### Cold-Start Limitations
+* **New User Cold-Start**: A user with no historical ratings cannot receive personalized collaborative recommendations (`ValueError` is raised).
+* **New Movie Cold-Start**: A movie with no user ratings has no collaborative vector and cannot be compared (`ValueError` is raised).
+* *Note*: Cold-start limitations will be resolved in Phase 5 by combining content-based and collaborative signals in a Hybrid Recommendation System.
 
 ---
 
@@ -142,27 +153,30 @@ ML project/
 │   │           └── user_item_matrix_sparsity.png
 │   ├── src/
 │   │   ├── __init__.py
-│   │   ├── config.py           # Pathing & configuration management
-│   │   ├── data_loader.py      # MovieLens dataset loading functions
-│   │   ├── data_validator.py   # Dataset schema & integrity validation
-│   │   ├── preprocessing.py    # Movie, rating, and genre preprocessing
-│   │   ├── eda.py              # Statistical aggregations & plot generation
-│   │   └── content_based.py    # Content-Based Recommender (TF-IDF & Cosine Similarity)
+│   │   ├── config.py                   # Pathing & configuration management
+│   │   ├── data_loader.py              # MovieLens dataset loading functions
+│   │   ├── data_validator.py           # Dataset schema & integrity validation
+│   │   ├── preprocessing.py            # Movie, rating, and genre preprocessing
+│   │   ├── eda.py                      # Statistical aggregations & plot generation
+│   │   ├── content_based.py            # Phase 3 Content-Based Recommender (TF-IDF & Cosine Similarity)
+│   │   └── collaborative_filtering.py  # Phase 4 Item-Based Collaborative Filtering Recommender
 │   ├── scripts/
-│   │   ├── load_dataset.py     # Phase 1 loader & validator script
-│   │   ├── run_eda.py          # Phase 2 preprocessing & EDA pipeline script
-│   │   └── test_content_recommender.py # Phase 3 Content Recommender manual test script
+│   │   ├── load_dataset.py             # Phase 1 loader & validator script
+│   │   ├── run_eda.py                  # Phase 2 preprocessing & EDA pipeline script
+│   │   ├── test_content_recommender.py # Phase 3 Content Recommender manual test script
+│   │   └── test_collaborative_recommender.py # Phase 4 Collaborative Recommender manual test script
 │   ├── tests/
 │   │   ├── __init__.py
-│   │   ├── test_data_loader.py    # Unit tests for data loading (Phase 1)
-│   │   ├── test_data_validator.py # Unit tests for data validation (Phase 1)
-│   │   ├── test_preprocessing.py  # Unit tests for preprocessing & EDA (Phase 2)
-│   │   └── test_content_based.py  # Unit tests for content recommender (Phase 3)
-│   └── requirements.txt        # Pinned Python ML dependencies
+│   │   ├── test_data_loader.py            # Unit tests for data loading (Phase 1)
+│   │   ├── test_data_validator.py         # Unit tests for data validation (Phase 1)
+│   │   ├── test_preprocessing.py          # Unit tests for preprocessing & EDA (Phase 2)
+│   │   ├── test_content_based.py          # Unit tests for content recommender (Phase 3)
+│   │   └── test_collaborative_filtering.py # Unit tests for collaborative recommender (Phase 4)
+│   └── requirements.txt                # Pinned Python ML dependencies
 ├── docs/
-├── .env.example                # Example environment variables
-├── .gitignore                  # Git ignore rules
-└── README.md                   # Project documentation
+├── .env.example                        # Example environment variables
+├── .gitignore                          # Git ignore rules
+└── README.md                           # Project documentation
 ```
 
 ---
@@ -189,13 +203,13 @@ python -m venv .venv
 pip install -r ml/requirements.txt
 ```
 
-### 3. Run Content-Based Recommender Verification Script
+### 3. Run Collaborative Filtering Recommender Verification Script
 
 ```bash
-python3 ml/scripts/test_content_recommender.py
+python3 ml/scripts/test_collaborative_recommender.py
 ```
 
-Loads processed movies, fits TF-IDF recommender, outputs top 10 recommendations for `"Toy Story (1995)"`, and demonstrates explanations and error handling.
+Loads processed ratings and movies, fits collaborative recommender, outputs top 10 personalized recommendations for User 1, displays item-item rating similarities, demonstrates collaborative explanations, and verifies error handling.
 
 ### 4. Run Full Automated Test Suite
 
@@ -203,4 +217,4 @@ Loads processed movies, fits TF-IDF recommender, outputs top 10 recommendations 
 python3 -m pytest ml/tests/
 ```
 
-Executes all 45 unit tests across Phase 1, Phase 2, and Phase 3.
+Executes all 69 unit tests across Phase 1, Phase 2, Phase 3, and Phase 4.
