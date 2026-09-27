@@ -234,3 +234,67 @@ python3 -m pytest ml/tests/
 ```text
 ====================== 148 passed, 10 warnings in 15.27s =======================
 ```
+
+---
+
+## Phase 9 Walkthrough — Frontend Development and API Integration
+
+### Overview & Objectives
+Phase 9 delivers a complete, responsive Next.js web application for the ML Recommendation System, providing a interactive interface for movie discovery, recommendation generation across Content-Based, Collaborative Filtering, and Hybrid models, user profile management, and interactive star rating controls.
+
+### Implementation Architecture
+1. **Next.js App Router Structure (`frontend/src/app`)**:
+   - `page.tsx`: Home dashboard featuring hero section, search quick-access, recommendation engine shortcuts, and API health status card.
+   - `movies/page.tsx`: Catalog search with debounced text search, limit dropdown, genre pills, score badges, and pagination placeholders.
+   - `movies/[movieId]/page.tsx`: Detailed view for catalog movies with interactive star rating control ($0.5 \le rating \le 5.0$) and a row of content-based similar movies.
+   - `recommendations/page.tsx`: Recommendation generator supporting Content-Based, Item-Based Collaborative, and Hybrid recommendation engines with interactive content weight and collaborative weight sliders ($w_{\text{content}} + w_{\text{collab}} = 1.0$).
+   - `users/page.tsx`: User administration page with registration form (Zod validation for username and email), user search lookup, inline detail modification, and modal confirmation for account deletion.
+   - `users/[userId]/page.tsx`: Dedicated user profile dashboard listing user's rating history with inline score modification / deletion, and logged recommendation request history.
+
+2. **State Management & Context Providers (`frontend/src/context`)**:
+   - `UserContext.tsx`: Manages active user profile state with local persistence in `localStorage`, enabling Seamless switching between users across pages.
+   - `ToastContext.tsx`: Provides non-intrusive floating toast notifications for user feedback on actions (rating added/updated, user registered/updated, error alerts).
+
+3. **Type-Safe API Client (`frontend/src/lib/api`)**:
+   - Modular REST client modules (`client.ts`, `movies.ts`, `recommendations.ts`, `users.ts`, `ratings.ts`, `health.ts`) wrapping backend endpoints with structured error handling via `CustomApiError`.
+
+4. **Component Architecture (`frontend/src/components`)**:
+   - `Navbar.tsx` & `Footer.tsx`: Cinematic dark header with active user selector badge, navigation links, and mobile drawer.
+   - `StarRating.tsx`: Interactive half-star rating component supporting mouse hover previews and exact half-star increments ($0.5$ to $5.0$).
+   - `MovieCard.tsx`: Standardized movie card with genre badges, release year, score pills, and quick rating action.
+   - `SkeletonCard.tsx` & `ConfirmationModal.tsx`: Accessible loading placeholders and confirmation dialogs for destructive actions.
+
+### Test & Build Verification
+
+1. **Frontend Test Suite (Vitest + React Testing Library)**:
+   ```bash
+   cd frontend && npm test
+   ```
+   ```text
+   RUN  v2.1.9 /Users/thakurveersingh/Documents/ML project/frontend
+
+   ✓ src/test/api.test.ts (5)
+   ✓ src/test/components.test.tsx (3)
+
+   Test Files  2 passed (2)
+        Tests  8 passed (8)
+     Duration  813ms
+   ```
+
+2. **Production Build & ESLint Check**:
+   ```bash
+   cd frontend && npm run lint && npm run build
+   ```
+   ```text
+   ✔ No ESLint warnings or errors
+   ✓ Compiled successfully
+   ✓ Prerendered 7 static/dynamic routes
+   ```
+
+3. **Backend Integration Verification**:
+   ```bash
+   PYTHONPATH=. .venv/bin/pytest ml/tests/ -v
+   ```
+   ```text
+   ===================== 148 passed, 1 warning in 16.97s ======================
+   ```

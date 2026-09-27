@@ -178,8 +178,41 @@ ML project/
 │   │   ├── test_content_based.py          # Unit tests for content recommender (Phase 3)
 │   │   ├── test_collaborative_filtering.py # Unit tests for collaborative recommender (Phase 4)
 │   │   ├── test_hybrid_recommender.py     # Unit tests for hybrid recommender (Phase 5)
-│   │   └── test_evaluation.py             # Unit tests for evaluation framework (Phase 6)
-│   └── requirements.txt                # Pinned Python ML dependencies
+│   │   ├── test_evaluation.py             # Unit tests for evaluation framework (Phase 6)
+│   │   ├── test_database.py               # Phase 8 ORM unit tests
+│   │   ├── test_database_integration.py   # Phase 8 DB integration tests
+│   │   ├── test_ratings.py                # Phase 8 Rating repository tests
+│   │   ├── test_recommendation_history.py # Phase 8 Recommendation history tests
+│   │   └── test_users.py                  # Phase 8 User CRUD tests
+│   └── requirements.txt                # Pinned Python ML & Backend dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── app/                        # Next.js App Router routes & pages
+│   │   │   ├── layout.tsx              # Root layout & global providers
+│   │   │   ├── page.tsx                # Home dashboard page
+│   │   │   ├── globals.css             # Tailwind CSS global styles
+│   │   │   ├── movies/
+│   │   │   │   ├── page.tsx            # Catalog movie search page
+│   │   │   │   └── [movieId]/page.tsx  # Movie details & similar movies
+│   │   │   ├── recommendations/
+│   │   │   │   └── page.tsx            # Interactive recommendation page (3 modes)
+│   │   │   └── users/
+│   │   │       ├── page.tsx            # User management page
+│   │   │       └── [userId]/page.tsx  # User profile & rating history page
+│   │   ├── components/                 # Reusable UI components
+│   │   │   ├── layout/                 # Navbar & Footer components
+│   │   │   ├── movies/                 # MovieCard component
+│   │   │   ├── ratings/                # StarRating component
+│   │   │   └── ui/                     # SkeletonCard & ConfirmationModal
+│   │   ├── context/                    # UserContext & ToastContext providers
+│   │   ├── lib/api/                    # Typed API client functions
+│   │   ├── test/                       # Vitest & React Testing Library tests
+│   │   └── types/                      # TypeScript interface schemas
+│   ├── package.json                    # Frontend dependencies & scripts
+│   ├── tsconfig.json                   # TypeScript configuration
+│   ├── tailwind.config.ts              # Tailwind CSS configuration
+│   ├── vitest.config.ts                # Vitest test framework configuration
+│   └── .env.local                      # Local environment configuration
 ├── docs/
 ├── .env.example                        # Example environment variables
 ├── .gitignore                          # Git ignore rules
@@ -290,3 +323,83 @@ Phase 8 integrates PostgreSQL with SQLAlchemy 2.x ORM, Alembic migrations, and P
 * **`DELETE /api/v1/users/{user_id}/ratings/{movie_id}`**: Delete rating.
 * **`GET /api/v1/users/{user_id}/recommendation-history`**: Query logged recommendation requests.
 * **`GET /api/v1/health`**: Extended to check DB connectivity (`SELECT 1`).
+
+---
+
+## Phase 9 — Frontend Development and API Integration
+
+Phase 9 implements a full-featured, responsive, production-ready Next.js web interface integrated with the FastAPI backend and PostgreSQL database layer.
+
+### 1. Core Pages & UI Components
+* **Home Page (`/`)**: Highlighting system capabilities, fast search access, quick recommendation mode shortcuts, and backend status monitor.
+* **Movie Discovery Catalog (`/movies`)**: Instant movie search with debounced inputs, limit controls, genre tags, and rating scores.
+* **Movie Details & Related Content (`/movies/[movieId]`)**: Movie metadata display, active user star rating control ($0.5 \le rating \le 5.0$), and content-based recommendation showcase.
+* **Recommendation Hub (`/recommendations`)**: Tabbed interface switching between Content-Based, Item-Based Collaborative, and Hybrid recommendation engines with real-time content/collaborative weight sliders ($w_{content} + w_{collab} = 1.0$).
+* **User Management (`/users`)**: User registration form with client-side Zod validation, user lookup, inline detail edits, and deletion confirmation modal.
+* **User Profile & Rating History (`/users/[userId]`)**: User profile dashboard displaying rated movies list, star rating modifier/deleter, and logged recommendation request history.
+
+### 2. Tech Stack & Frontend Engineering
+* **Framework**: Next.js 14 (App Router) with TypeScript strict mode.
+* **Styling & UI**: Tailwind CSS (cinematic dark theme palette), Lucide React Icons.
+* **Forms & Validation**: React Hook Form, Zod schema validation.
+* **State Management**: `UserContext` for active user switching & persistent `localStorage` session, `ToastContext` for floating alerts.
+* **Testing**: Vitest, React Testing Library, and jsdom (100% test pass rate).
+
+---
+
+## Quickstart Instructions
+
+### 1. Setup Backend Environment (Python)
+
+**macOS / Linux:**
+```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install backend dependencies
+pip install -r ml/requirements.txt
+
+# Run database migrations
+alembic upgrade head
+```
+
+### 2. Start FastAPI REST API Backend
+
+```bash
+uvicorn ml.api.main:app --reload --port 8000
+```
+
+- API Base URL: `http://localhost:8000`
+- Swagger UI Documentation: `http://localhost:8000/docs`
+
+### 3. Setup and Run Next.js Frontend Application
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install Node.js dependencies
+npm install
+
+# Start Next.js development server
+npm run dev
+```
+
+- Web App Interface: `http://localhost:3000`
+
+### 4. Running Verification Test Suites
+
+```bash
+# Run backend pytest suite (148 tests)
+PYTHONPATH=. pytest ml/tests/
+
+# Run frontend Vitest suite (8 tests)
+cd frontend && npm test
+```
+
+### 5. Running Offline Evaluation Pipeline (Phase 6)
+
+```bash
+python3 ml/scripts/run_evaluation.py
+```
