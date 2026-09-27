@@ -26,4 +26,5 @@ class HealthResponse(BaseModel):
     """Overall API health check response payload."""
     status: str = Field(..., examples=["healthy"])
     service: str = Field(..., examples=["movie-recommendation-api"])
+    database: str = Field("healthy", examples=["healthy"])
     models: ModelHealthStatus

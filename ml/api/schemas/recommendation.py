@@ -1,7 +1,8 @@
 """Recommendation domain Pydantic schemas."""
 
-from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
+from typing import List, Optional, Any
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class ContentRecommendationRequest(BaseModel):
@@ -56,3 +57,26 @@ class RecommendationResponse(BaseModel):
     content_weight: Optional[float] = Field(None, description="Content weight used if hybrid.", examples=[0.5])
     collaborative_weight: Optional[float] = Field(None, description="Collaborative weight used if hybrid.", examples=[0.5])
     recommendations: List[RecommendationItem] = Field(..., description="List of top K recommendation items.")
+
+
+class RecommendationHistoryResponse(BaseModel):
+    """Schema for RecommendationHistory record response."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(..., description="History record ID integer.", examples=[1])
+    user_id: Optional[int] = Field(None, description="User ID if associated.", examples=[1])
+    model: str = Field(..., description="Name of recommendation model used.", examples=["hybrid"])
+    seed_movie_id: Optional[int] = Field(None, description="Seed movie ID if provided.", examples=[1])
+    top_k: int = Field(..., description="Top K recommendations count requested.", examples=[10])
+    content_weight: Optional[float] = Field(None, description="Content weight used.", examples=[0.5])
+    collaborative_weight: Optional[float] = Field(None, description="Collaborative weight used.", examples=[0.5])
+    created_at: datetime = Field(..., description="Request creation timestamp.")
+    recommendations: Any = Field(..., description="Stored list of recommendation dictionaries.")
+
+
+class RecommendationHistoryListResponse(BaseModel):
+    """Schema for paginated recommendation history list response."""
+    items: List[RecommendationHistoryResponse] = Field(..., description="List of recommendation history items.")
+    total: int = Field(..., description="Total recommendation history count.", examples=[5])
+    limit: int = Field(..., description="Pagination limit.", examples=[20])
+    offset: int = Field(..., description="Pagination offset.", examples=[0])

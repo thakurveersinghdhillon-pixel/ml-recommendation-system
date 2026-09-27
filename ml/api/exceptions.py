@@ -4,6 +4,7 @@ import logging
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import IntegrityError
 from ml.api.schemas.common import ErrorResponse, ErrorDetail
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,34 @@ class UserNotFoundException(APIException):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
             code="USER_NOT_FOUND",
-            message=f"User ID {user_id} was not found in the training dataset."
+            message=f"User ID {user_id} was not found."
+        )
+
+
+class DuplicateUserException(APIException):
+    def __init__(self, detail: str = "A user with this username or email already exists."):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            code="DUPLICATE_USER",
+            message=detail
+        )
+
+
+class RatingNotFoundException(APIException):
+    def __init__(self, user_id: int, movie_id: int):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="RATING_NOT_FOUND",
+            message=f"Rating for user ID {user_id} and movie ID {movie_id} was not found."
+        )
+
+
+class DatabaseConnectionException(APIException):
+    def __init__(self, detail: str = "Database connection failure or service unavailable."):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="DATABASE_UNAVAILABLE",
+            message=detail
         )
 
 
@@ -75,7 +103,14 @@ def register_exception_handlers(app):
         detail_msg = "; ".join(error_msgs) if error_msgs else "Invalid request body or parameters."
         logger.info("Validation Error: %s (path: %s)", detail_msg, request.url.path)
         payload = ErrorResponse(error=ErrorDetail(code="VALIDATION_ERROR", message=detail_msg))
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=payload.model_dump())
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=payload.model_dump())
+
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError):
+        logger.warning("Database Integrity Error: %s (path: %s)", str(exc), request.url.path)
+        payload = ErrorResponse(error=ErrorDetail(code="INTEGRITY_ERROR", message="Database integrity constraint violation."))
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=payload.model_dump())
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):

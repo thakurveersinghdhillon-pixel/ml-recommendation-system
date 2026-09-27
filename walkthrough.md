@@ -184,3 +184,53 @@ Testing POST /api/v1/recommendations/hybrid...
   First Rec: Entertaining Angels: The Dorothy Day Story (1996) Score: 0.5
 ```
 
+---
+
+## Phase 8 Walkthrough — PostgreSQL Database Integration
+
+### Overview & Objectives
+Phase 8 integrates a robust PostgreSQL database layer to persist `User` accounts, `Rating` entries, and `RecommendationHistory` logs for all API requests. The implementation utilizes **SQLAlchemy 2.x ORM**, **Alembic 1.x migrations**, **Pydantic v2 schemas**, and **FastAPI dependency injection**, while preserving 100% of the Phase 1–7 recommendation engines and offline evaluation pipelines intact.
+
+### Database Architecture & Models
+1. **`User` ORM Model (`users`)**:
+   - `id`: Integer primary key (autoincrement).
+   - `username`: String(50), unique, indexed, non-null.
+   - `email`: String(100), unique, indexed, non-null.
+   - `created_at` / `updated_at`: Timezone-aware UTC datetimes.
+   - Relationships: `ratings` (cascade="all, delete-orphan"), `recommendation_history`.
+
+2. **`Rating` ORM Model (`ratings`)**:
+   - `id`: Integer primary key (autoincrement).
+   - `user_id`: Foreign key referencing `users.id` (`ondelete="CASCADE"`).
+   - `movie_id`: Integer, indexed.
+   - `rating`: Float, validated $0.5 \le rating \le 5.0$ in 0.5 increments.
+   - Constraints: `UniqueConstraint("user_id", "movie_id", name="uq_user_movie_rating")`.
+   - Atomic `RatingRepository.upsert()` uses `SELECT FOR UPDATE` to avoid race conditions.
+
+3. **`RecommendationHistory` ORM Model (`recommendation_history`)**:
+   - `id`: Integer primary key.
+   - `user_id`: Foreign key referencing `users.id` (`ondelete="SET NULL"`).
+   - `model`: String(50) (`content_based`, `collaborative_filtering`, `hybrid`).
+   - `seed_movie_id`, `top_k`, `content_weight`, `collaborative_weight`, `created_at`.
+   - `recommendations`: JSON / JSONB list of recommended movie items.
+
+### API Routes & Functionality Verified
+- `POST /api/v1/users`: Create user (201 Created). Checks unique username/email, returning 409 Conflict if duplicate.
+- `GET /api/v1/users/{id}`: Fetch user profile (200 OK or 404 Not Found).
+- `PATCH /api/v1/users/{id}`: Partial update user profile (200 OK or 409 Conflict).
+- `DELETE /api/v1/users/{id}`: Remove user and cascade delete ratings (204 No Content).
+- `PUT /api/v1/ratings`: Atomic rating upsert (201 Created on insert, 200 OK on update).
+- `GET /api/v1/users/{id}/ratings`: Paginated list of user ratings.
+- `GET /api/v1/users/{id}/ratings/{movie_id}`: Fetch individual rating.
+- `DELETE /api/v1/users/{id}/ratings/{movie_id}`: Delete individual rating (204 No Content).
+- `GET /api/v1/users/{id}/recommendation-history`: Paginated list of logged recommendation requests.
+- `GET /api/v1/health`: Extended to perform database readiness check (`SELECT 1`).
+
+### Test Verification
+All 148 automated tests pass across Phase 1 through Phase 8:
+```bash
+python3 -m pytest ml/tests/
+```
+```text
+====================== 148 passed, 10 warnings in 15.27s =======================
+```

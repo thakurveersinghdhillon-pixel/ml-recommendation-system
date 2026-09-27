@@ -8,10 +8,13 @@ import pandas as pd
 
 from ml.api import config as api_config
 from ml.api.exceptions import register_exception_handlers
-from ml.api.routers import health, recommendations, movies
+from ml.api.routers import health, recommendations, movies, users, ratings
 from ml.src.content_based import ContentBasedRecommender
 from ml.src.collaborative_filtering import ItemBasedCollaborativeRecommender
 from ml.src.hybrid_recommender import HybridRecommender
+
+from ml.api.database.base import Base
+from ml.api.database.session import engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -19,8 +22,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for loading datasets and fitting models at application startup once."""
+    """Lifespan context manager for initializing DB tables, loading datasets and fitting models at application startup."""
+    logger.info("Initializing database tables...")
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning("Could not auto-create database tables on startup: %s", str(e))
+
     logger.info("Initializing FastAPI recommendation models during lifespan startup...")
+
     
     try:
         movies_path = api_config.MOVIES_CSV_PATH
@@ -101,6 +111,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=api_config.API_V1_STR)
     app.include_router(recommendations.router, prefix=api_config.API_V1_STR)
     app.include_router(movies.router, prefix=api_config.API_V1_STR)
+    app.include_router(users.router, prefix=api_config.API_V1_STR)
+    app.include_router(ratings.router, prefix=api_config.API_V1_STR)
+
 
     return app
 

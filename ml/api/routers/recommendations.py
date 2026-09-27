@@ -1,7 +1,9 @@
 """Recommendations Router for Content, Collaborative, and Hybrid models."""
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 from ml.api.dependencies import get_recommendation_service
+from ml.api.database.session import get_db
 from ml.api.services.recommendation_service import RecommendationService
 from ml.api.schemas.recommendation import (
     ContentRecommendationRequest,
@@ -27,10 +29,11 @@ router = APIRouter(prefix="/recommendations", tags=["Recommendations"])
 )
 async def get_content_recommendations(
     request: ContentRecommendationRequest,
-    service: RecommendationService = Depends(get_recommendation_service)
+    service: RecommendationService = Depends(get_recommendation_service),
+    db: Session = Depends(get_db)
 ):
     """Generate Content-Based Movie Recommendations using TF-IDF and Cosine Similarity."""
-    return service.get_content_recommendations(movie_id=request.movie_id, top_k=request.top_k)
+    return service.get_content_recommendations(movie_id=request.movie_id, top_k=request.top_k, db=db)
 
 
 @router.post(
@@ -46,10 +49,11 @@ async def get_content_recommendations(
 )
 async def get_collaborative_recommendations(
     request: CollaborativeRecommendationRequest,
-    service: RecommendationService = Depends(get_recommendation_service)
+    service: RecommendationService = Depends(get_recommendation_service),
+    db: Session = Depends(get_db)
 ):
     """Generate Item-Based Collaborative Filtering Recommendations for a User."""
-    return service.get_collaborative_recommendations(user_id=request.user_id, top_k=request.top_k)
+    return service.get_collaborative_recommendations(user_id=request.user_id, top_k=request.top_k, db=db)
 
 
 @router.post(
@@ -65,7 +69,8 @@ async def get_collaborative_recommendations(
 )
 async def get_hybrid_recommendations(
     request: HybridRecommendationRequest,
-    service: RecommendationService = Depends(get_recommendation_service)
+    service: RecommendationService = Depends(get_recommendation_service),
+    db: Session = Depends(get_db)
 ):
     """Generate Hybrid Recommendations combining Content-Based and Collaborative Filtering signals."""
     return service.get_hybrid_recommendations(
@@ -73,5 +78,6 @@ async def get_hybrid_recommendations(
         movie_id=request.movie_id,
         top_k=request.top_k,
         content_weight=request.content_weight,
-        collaborative_weight=request.collaborative_weight
+        collaborative_weight=request.collaborative_weight,
+        db=db
     )

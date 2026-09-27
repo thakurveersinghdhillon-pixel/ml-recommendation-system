@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Request, Response, status
 from ml.api.schemas.common import HealthResponse, ModelHealthStatus, ErrorResponse
+from ml.api.database.session import check_db_health
 
 router = APIRouter(tags=["Health"])
 
@@ -11,12 +12,15 @@ router = APIRouter(tags=["Health"])
     response_model=HealthResponse,
     status_code=status.HTTP_200_OK,
     responses={
-        200: {"model": HealthResponse, "description": "API service and models are healthy and ready."},
-        503: {"model": ErrorResponse, "description": "Service unavailable or models not initialized."}
+        200: {"model": HealthResponse, "description": "API service, database, and models are healthy and ready."},
+        503: {"model": ErrorResponse, "description": "Service unavailable, database disconnected, or models not initialized."}
     }
 )
 async def health_check(request: Request, response: Response):
-    """Verify that API is running and recommendation models are initialized and ready."""
+    """Verify that API is running, database is connected, and recommendation models are initialized."""
+    db_ok = check_db_health()
+    db_status = "healthy" if db_ok else "unhealthy"
+
     content_rec = getattr(request.app.state, "content_recommender", None)
     collab_rec = getattr(request.app.state, "collaborative_recommender", None)
     hybrid_rec = getattr(request.app.state, "hybrid_recommender", None)
@@ -29,13 +33,14 @@ async def health_check(request: Request, response: Response):
     cf_status = "ready" if cf_ready else "not_ready"
     h_status = "ready" if h_ready else "not_ready"
 
-    all_ready = c_ready and cf_ready and h_ready
+    all_ready = c_ready and cf_ready and h_ready and db_ok
 
     if not all_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return HealthResponse(
             status="unhealthy",
             service="movie-recommendation-api",
+            database=db_status,
             models=ModelHealthStatus(
                 content_based=c_status,
                 collaborative=cf_status,
@@ -46,6 +51,7 @@ async def health_check(request: Request, response: Response):
     return HealthResponse(
         status="healthy",
         service="movie-recommendation-api",
+        database=db_status,
         models=ModelHealthStatus(
             content_based=c_status,
             collaborative=cf_status,

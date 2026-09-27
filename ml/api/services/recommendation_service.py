@@ -17,6 +17,10 @@ from ml.api.exceptions import (
 from ml.api.schemas.movie import MovieResponse, MovieSearchResponse
 from ml.api.schemas.recommendation import RecommendationItem, RecommendationResponse
 
+from ml.api.database.repositories.user_repository import UserRepository
+from ml.api.database.repositories.recommendation_repository import RecommendationHistoryRepository
+from sqlalchemy.orm import Session
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +107,13 @@ class RecommendationService:
             movies=movie_items
         )
 
-    def get_content_recommendations(self, movie_id: int, top_k: int = 10) -> RecommendationResponse:
+    def get_content_recommendations(
+        self,
+        movie_id: int,
+        top_k: int = 10,
+        user_id: Optional[int] = None,
+        db: Optional[Session] = None
+    ) -> RecommendationResponse:
         self._ensure_models_ready()
 
         # Lookup movie title
@@ -139,6 +149,24 @@ class RecommendationService:
                 )
             )
 
+        if db is not None:
+            try:
+                db_user_id = None
+                if user_id is not None and UserRepository(db).get_by_id(user_id) is not None:
+                    db_user_id = user_id
+                recs_json = [item.model_dump() for item in items]
+                RecommendationHistoryRepository(db).create_history(
+                    user_id=db_user_id,
+                    model="content_based",
+                    seed_movie_id=movie_id,
+                    top_k=top_k,
+                    content_weight=1.0,
+                    collaborative_weight=0.0,
+                    recommendations=recs_json
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist content recommendation history: %s", str(exc))
+
         return RecommendationResponse(
             model="content_based",
             seed_movie_id=movie_id,
@@ -146,7 +174,12 @@ class RecommendationService:
             recommendations=items
         )
 
-    def get_collaborative_recommendations(self, user_id: int, top_k: int = 10) -> RecommendationResponse:
+    def get_collaborative_recommendations(
+        self,
+        user_id: int,
+        top_k: int = 10,
+        db: Optional[Session] = None
+    ) -> RecommendationResponse:
         self._ensure_models_ready()
 
         # Check user existence
@@ -180,6 +213,24 @@ class RecommendationService:
                 )
             )
 
+        if db is not None:
+            try:
+                db_user_id = None
+                if user_id is not None and UserRepository(db).get_by_id(user_id) is not None:
+                    db_user_id = user_id
+                recs_json = [item.model_dump() for item in items]
+                RecommendationHistoryRepository(db).create_history(
+                    user_id=db_user_id,
+                    model="collaborative_filtering",
+                    seed_movie_id=None,
+                    top_k=top_k,
+                    content_weight=0.0,
+                    collaborative_weight=1.0,
+                    recommendations=recs_json
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist collaborative recommendation history: %s", str(exc))
+
         return RecommendationResponse(
             model="collaborative_filtering",
             user_id=user_id,
@@ -192,7 +243,8 @@ class RecommendationService:
         movie_id: Optional[int] = None,
         top_k: int = 10,
         content_weight: float = 0.5,
-        collaborative_weight: float = 0.5
+        collaborative_weight: float = 0.5,
+        db: Optional[Session] = None
     ) -> RecommendationResponse:
         self._ensure_models_ready()
 
@@ -267,6 +319,24 @@ class RecommendationService:
                     explanation=explanation
                 )
             )
+
+        if db is not None:
+            try:
+                db_user_id = None
+                if user_id is not None and UserRepository(db).get_by_id(user_id) is not None:
+                    db_user_id = user_id
+                recs_json = [item.model_dump() for item in items]
+                RecommendationHistoryRepository(db).create_history(
+                    user_id=db_user_id,
+                    model="hybrid",
+                    seed_movie_id=movie_id,
+                    top_k=top_k,
+                    content_weight=content_weight,
+                    collaborative_weight=collaborative_weight,
+                    recommendations=recs_json
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist hybrid recommendation history: %s", str(exc))
 
         return RecommendationResponse(
             model="hybrid",

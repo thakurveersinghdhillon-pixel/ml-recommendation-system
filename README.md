@@ -266,4 +266,27 @@ python3 ml/scripts/run_evaluation.py
 python3 -m pytest ml/tests/
 ```
 
-Executes all 122 unit tests across Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, and Phase 7.
+Executes all 148 unit and integration tests across Phase 1 through Phase 8.
+
+---
+
+## Phase 8 — PostgreSQL Database Integration
+
+Phase 8 integrates PostgreSQL with SQLAlchemy 2.x ORM, Alembic migrations, and Pydantic v2 schemas to persist users, ratings, and recommendation request history while preserving all Phase 1–7 ML engines intact.
+
+### 1. Database Schema & Models
+* **`User` (`users`)**: Stores registered users (`id`, `username`, `email`, UTC timestamps).
+* **`Rating` (`ratings`)**: Stores movie ratings (`id`, `user_id`, `movie_id`, `rating`, UTC timestamps). Enforces unique `(user_id, movie_id)` constraint and rating bounds ($0.5 \le rating \le 5.0$).
+* **`RecommendationHistory` (`recommendation_history`)**: Persists successful recommendation request payloads and generated movie items (`id`, `user_id`, `model`, `seed_movie_id`, `top_k`, `content_weight`, `collaborative_weight`, `created_at`, `recommendations` JSON/JSONB).
+
+### 2. REST API Endpoints (Phase 8 Additions)
+* **`POST /api/v1/users`**: Register user.
+* **`GET /api/v1/users/{user_id}`**: Fetch user details.
+* **`PATCH /api/v1/users/{user_id}`**: Update user details.
+* **`DELETE /api/v1/users/{user_id}`**: Delete user (cascades ratings/history).
+* **`PUT /api/v1/ratings`**: Create or update user movie rating (atomic upsert).
+* **`GET /api/v1/users/{user_id}/ratings`**: List paginated user ratings.
+* **`GET /api/v1/users/{user_id}/ratings/{movie_id}`**: Fetch specific rating.
+* **`DELETE /api/v1/users/{user_id}/ratings/{movie_id}`**: Delete rating.
+* **`GET /api/v1/users/{user_id}/recommendation-history`**: Query logged recommendation requests.
+* **`GET /api/v1/health`**: Extended to check DB connectivity (`SELECT 1`).
