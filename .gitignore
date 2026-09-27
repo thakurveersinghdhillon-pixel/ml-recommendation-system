@@ -1,8 +1,16 @@
 # Environment & Virtual Environments
 .env
+.env.local
+.env.*.local
 .venv/
 venv/
 env/
+
+# Next.js generated files & Node dependencies
+.next/
+out/
+node_modules/
+dist/
 
 # Python cache & artifacts
 __pycache__/
@@ -15,6 +23,10 @@ htmlcov/
 *.egg-info/
 .dist/
 build/
+
+# Database files
+*.db
+recommendations.db
 
 # IDE & OS files
 .vscode/
