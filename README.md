@@ -159,25 +159,55 @@ ML project/
 │   │   ├── preprocessing.py            # Movie, rating, and genre preprocessing
 │   │   ├── eda.py                      # Statistical aggregations & plot generation
 │   │   ├── content_based.py            # Phase 3 Content-Based Recommender (TF-IDF & Cosine Similarity)
-│   │   └── collaborative_filtering.py  # Phase 4 Item-Based Collaborative Filtering Recommender
+│   │   ├── collaborative_filtering.py  # Phase 4 Item-Based Collaborative Filtering Recommender
+│   │   ├── hybrid_recommender.py       # Phase 5 Hybrid Recommendation Engine
+│   │   ├── evaluation_utils.py         # Phase 6 Temporal split & ranking metrics
+│   │   └── evaluation.py               # Phase 6 ModelEvaluator & visualization pipeline
 │   ├── scripts/
 │   │   ├── load_dataset.py             # Phase 1 loader & validator script
 │   │   ├── run_eda.py                  # Phase 2 preprocessing & EDA pipeline script
 │   │   ├── test_content_recommender.py # Phase 3 Content Recommender manual test script
-│   │   └── test_collaborative_recommender.py # Phase 4 Collaborative Recommender manual test script
+│   │   ├── test_collaborative_recommender.py # Phase 4 Collaborative Recommender manual test script
+│   │   ├── test_hybrid_recommender.py  # Phase 5 Hybrid Recommender manual test script
+│   │   └── run_evaluation.py           # Phase 6 Model Evaluation pipeline script
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   ├── test_data_loader.py            # Unit tests for data loading (Phase 1)
 │   │   ├── test_data_validator.py         # Unit tests for data validation (Phase 1)
 │   │   ├── test_preprocessing.py          # Unit tests for preprocessing & EDA (Phase 2)
 │   │   ├── test_content_based.py          # Unit tests for content recommender (Phase 3)
-│   │   └── test_collaborative_filtering.py # Unit tests for collaborative recommender (Phase 4)
+│   │   ├── test_collaborative_filtering.py # Unit tests for collaborative recommender (Phase 4)
+│   │   ├── test_hybrid_recommender.py     # Unit tests for hybrid recommender (Phase 5)
+│   │   └── test_evaluation.py             # Unit tests for evaluation framework (Phase 6)
 │   └── requirements.txt                # Pinned Python ML dependencies
 ├── docs/
 ├── .env.example                        # Example environment variables
 ├── .gitignore                          # Git ignore rules
 └── README.md                           # Project documentation
 ```
+
+---
+
+## Phase 6 — Recommendation Model Evaluation Framework
+
+Phase 6 implements a leakage-free, reproducible evaluation framework comparing Content-Based (Phase 3), Item-Based Collaborative Filtering (Phase 4), and Hybrid Recommendation (Phase 5) models on the MovieLens dataset.
+
+### 1. Leakage-Free Temporal Split Methodology
+- Ratings for each user are sorted chronologically (`timestamp ASC`, tie-breaker `movieId ASC`).
+- Earlier interactions ($(1 - \text{test\_ratio})$) form `train_df`, later interactions ($\text{test\_ratio}=0.20$) form `test_df`.
+- **Strict Data Isolation**: All models are fitted exclusively on `train_df`. `test_df` interactions are used solely for ground-truth relevance measurement.
+- **Content Seed Strategy**: Content-based seed titles are selected from the user's most recent highly-rated training interaction ONLY (`timestamp DESC`, `rating DESC`, `movieId ASC`). Never from `test_df`.
+
+### 2. Evaluated Ranking Metrics
+- **Precision@K**: $\frac{|\text{Top-}K \cap \text{Relevant Test Set}|}{K}$
+- **Recall@K**: $\frac{|\text{Top-}K \cap \text{Relevant Test Set}|}{|\text{Relevant Test Set}|}$ (Evaluated on users with $\ge 1$ relevant test item).
+- **NDCG@K**: $\frac{\text{DCG}@K}{\text{IDCG}@K}$ where $\text{DCG}@K = \sum_{i=1}^K \frac{rel_i}{\log_2(i+1)}$.
+- **Hit Rate@K**: $1.0$ if $|\text{Top-}K \cap \text{Relevant Test Set}| > 0$ else $0.0$.
+- **Catalog Coverage**: Proportion of unique catalog movie IDs recommended across all evaluated users.
+- **Relevance Threshold**: Ratings $\ge 4.0$ in test set.
+
+### 3. Rating Prediction Metrics (RMSE / MAE) Non-Applicability
+RMSE and MAE measure 1–5 star rating prediction error ($\hat{r}_{u,i}$). Because Phase 3, 4, and 5 compute relative similarity and ranking scores rather than absolute 1–5 star ratings, RMSE and MAE are mathematically non-applicable and excluded to maintain evaluation integrity.
 
 ---
 
@@ -191,25 +221,17 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-**Windows:**
-```cmd
-python -m venv .venv
-.venv\Scripts\activate
-```
-
 ### 2. Install Dependencies
 
 ```bash
 pip install -r ml/requirements.txt
 ```
 
-### 3. Run Collaborative Filtering Recommender Verification Script
+### 3. Run Recommendation Model Evaluation Pipeline (Phase 6)
 
 ```bash
-python3 ml/scripts/test_collaborative_recommender.py
+python3 ml/scripts/run_evaluation.py
 ```
-
-Loads processed ratings and movies, fits collaborative recommender, outputs top 10 personalized recommendations for User 1, displays item-item rating similarities, demonstrates collaborative explanations, and verifies error handling.
 
 ### 4. Run Full Automated Test Suite
 
@@ -217,4 +239,4 @@ Loads processed ratings and movies, fits collaborative recommender, outputs top 
 python3 -m pytest ml/tests/
 ```
 
-Executes all 69 unit tests across Phase 1, Phase 2, Phase 3, and Phase 4.
+Executes all 105 unit tests across Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6.

@@ -58,6 +58,7 @@ class ContentBasedRecommender:
         self.tfidf_matrix: np.ndarray | None = None
         self.similarity_matrix: np.ndarray | None = None
         self.movies_df: pd.DataFrame | None = None
+        self.movie_ids_arr: np.ndarray | None = None
         self.title_to_index: dict[str, int] = {}
         self.is_fitted: bool = False
 
@@ -81,6 +82,7 @@ class ContentBasedRecommender:
 
         # Make an isolated copy and reset index for deterministic integer positioning
         self.movies_df = movies_df.copy().reset_index(drop=True)
+        self.movie_ids_arr = self.movies_df["movieId"].values.astype(int)
 
         # Build normalized title lookup mapping (deterministic: first occurrence wins)
         self.title_to_index = {}
@@ -186,7 +188,7 @@ class ContentBasedRecommender:
         for idx, score in enumerate(sim_scores):
             if idx == source_idx:
                 continue
-            movie_id = int(self.movies_df.iloc[idx]["movieId"])
+            movie_id = int(self.movie_ids_arr[idx])
             candidates.append((idx, float(score), movie_id))
 
         # Primary sort: similarity_score DESC; Secondary sort (tie-breaker): movieId ASC

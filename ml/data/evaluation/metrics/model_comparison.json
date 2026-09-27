@@ -1,0 +1,82 @@
+{
+  "metadata": {
+    "test_ratio": 0.2,
+    "min_ratings": 5,
+    "relevance_threshold": 4.0,
+    "k_values": [
+      5,
+      10,
+      20
+    ],
+    "candidate_pool_size": 100,
+    "hybrid_weights": {
+      "content_weight": 0.5,
+      "collaborative_weight": 0.5
+    },
+    "seed": 42,
+    "total_users": 610,
+    "eligible_users": 610,
+    "excluded_users": 0,
+    "users_evaluated": 610,
+    "users_with_no_relevant_test_items": 18,
+    "catalog_size": 9742,
+    "train_interactions": 80419,
+    "test_interactions": 20417
+  },
+  "models": [
+    {
+      "Model": "Content-Based",
+      "Precision@5": 0.0105,
+      "Recall@5": 0.0053,
+      "NDCG@5": 0.0126,
+      "Hit Rate@5": 0.0439,
+      "Coverage@5": 0.1389,
+      "Precision@10": 0.0072,
+      "Recall@10": 0.0078,
+      "NDCG@10": 0.0111,
+      "Hit Rate@10": 0.0642,
+      "Coverage@10": 0.231,
+      "Precision@20": 0.0057,
+      "Recall@20": 0.011,
+      "NDCG@20": 0.0115,
+      "Hit Rate@20": 0.0963,
+      "Coverage@20": 0.3665
+    },
+    {
+      "Model": "Collaborative Filtering",
+      "Precision@5": 0.0003,
+      "Recall@5": 0.0,
+      "NDCG@5": 0.0002,
+      "Hit Rate@5": 0.0017,
+      "Coverage@5": 0.0642,
+      "Precision@10": 0.0002,
+      "Recall@10": 0.0,
+      "NDCG@10": 0.0001,
+      "Hit Rate@10": 0.0017,
+      "Coverage@10": 0.0947,
+      "Precision@20": 0.0002,
+      "Recall@20": 0.0,
+      "NDCG@20": 0.0002,
+      "Hit Rate@20": 0.0034,
+      "Coverage@20": 0.1362
+    },
+    {
+      "Model": "Hybrid",
+      "Precision@5": 0.0023,
+      "Recall@5": 0.0006,
+      "NDCG@5": 0.0027,
+      "Hit Rate@5": 0.0101,
+      "Coverage@5": 0.0849,
+      "Precision@10": 0.0021,
+      "Recall@10": 0.001,
+      "NDCG@10": 0.0025,
+      "Hit Rate@10": 0.0169,
+      "Coverage@10": 0.1381,
+      "Precision@20": 0.0016,
+      "Recall@20": 0.0015,
+      "NDCG@20": 0.0022,
+      "Hit Rate@20": 0.0253,
+      "Coverage@20": 0.2295
+    }
+  ]
+}

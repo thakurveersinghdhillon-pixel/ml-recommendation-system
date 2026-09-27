@@ -113,4 +113,38 @@ $$\text{Contribution} = S_{i, c} \times (r_{u, i} - \bar{r}_u)$$
 * **Cold-Start Limitations**:
   - **Unknown User**: A user without rating history cannot receive collaborative recommendations (`ValueError` is raised).
   - **Unknown Movie**: A movie without ratings cannot be evaluated (`ValueError` is raised).
-  - Cold-start handling will be resolved in Phase 5 by combining content-based metadata features with collaborative signals in a Hybrid Recommendation System.
+
+---
+
+## Phase 6 Walkthrough — Recommendation Model Evaluation
+
+### Evaluation Setup & Methodology
+- **Dataset**: MovieLens `ml-latest-small` (9,742 movies, 100,836 ratings).
+- **Temporal Split**: 610 eligible users (100% of dataset). 80,419 training interactions, 20,417 test interactions. 0 excluded users.
+- **Relevance Threshold**: Test ratings $\ge 4.0$. 18 test users had 0 relevant test items (excluded from macro-average recall denominators).
+- **Candidate Pool Size**: Top 100 candidate items per model.
+
+### Key Evaluation Metric Results
+
+| Model | P@5 | R@5 | NDCG@5 | HR@5 | P@10 | R@10 | NDCG@10 | HR@10 | Coverage@10 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Content-Based** | **0.0105** | **0.0053** | **0.0126** | **0.0439** | **0.0072** | **0.0078** | **0.0111** | **0.0642** | **23.10%** |
+| **Collaborative Filtering** | 0.0003 | 0.0000 | 0.0002 | 0.0017 | 0.0002 | 0.0000 | 0.0001 | 0.0017 | 9.47% |
+| **Hybrid (50/50)** | 0.0023 | 0.0006 | 0.0027 | 0.0101 | 0.0021 | 0.0010 | 0.0025 | 0.0169 | 13.81% |
+
+### Generated Artifacts
+1. `ml/data/evaluation/metrics/model_comparison.csv`
+2. `ml/data/evaluation/metrics/model_comparison.json`
+3. `ml/data/evaluation/metrics/per_user_metrics.csv`
+4. `ml/data/evaluation/plots/precision_at_k.png`
+5. `ml/data/evaluation/plots/recall_at_k.png`
+6. `ml/data/evaluation/plots/ndcg_at_k.png`
+7. `ml/data/evaluation/plots/hit_rate_at_k.png`
+8. `ml/data/evaluation/plots/catalog_coverage.png`
+
+### Test Verification
+All 105 unit tests pass cleanly:
+```bash
+python3 -m pytest ml/tests/
+```
+
