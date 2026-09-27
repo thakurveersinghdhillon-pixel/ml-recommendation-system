@@ -211,6 +211,25 @@ RMSE and MAE measure 1–5 star rating prediction error ($\hat{r}_{u,i}$). Becau
 
 ---
 
+## Phase 7 — FastAPI Backend Development
+
+Phase 7 wraps the existing Phase 3 Content-Based, Phase 4 Collaborative Filtering, and Phase 5 Hybrid recommendation models into a production-oriented REST API built with FastAPI, Pydantic validation, lifespan model fitting, and OpenAPI/Swagger UI.
+
+### 1. REST API Endpoints
+- **`GET /api/v1/health`**: Service health check & model readiness report.
+- **`POST /api/v1/recommendations/content`**: Content-based recommendations by seed `movie_id`.
+- **`POST /api/v1/recommendations/collaborative`**: Collaborative recommendations by `user_id`.
+- **`POST /api/v1/recommendations/hybrid`**: Hybrid recommendations by `user_id` and optional seed `movie_id`.
+- **`GET /api/v1/movies/search?q={query}&limit={limit}`**: Partial title movie search.
+- **`GET /api/v1/movies/{movie_id}`**: Movie details lookup.
+
+### 2. Swagger UI & OpenAPI Docs
+Interactive API documentation is served automatically at:
+- **Swagger UI**: `http://127.0.0.1:8000/docs`
+- **OpenAPI JSON**: `http://127.0.0.1:8000/api/v1/openapi.json`
+
+---
+
 ## Quickstart Instructions
 
 ### 1. Create and Activate Virtual Environment
@@ -227,16 +246,24 @@ source .venv/bin/activate
 pip install -r ml/requirements.txt
 ```
 
-### 3. Run Recommendation Model Evaluation Pipeline (Phase 6)
+### 3. Start FastAPI Recommendation REST API Server (Phase 7)
+
+```bash
+uvicorn ml.api.main:app --reload --port 8000
+```
+
+Access Swagger UI interactive docs at `http://127.0.0.1:8000/docs`.
+
+### 4. Run Offline Evaluation Pipeline (Phase 6)
 
 ```bash
 python3 ml/scripts/run_evaluation.py
 ```
 
-### 4. Run Full Automated Test Suite
+### 5. Run Full Automated Test Suite
 
 ```bash
 python3 -m pytest ml/tests/
 ```
 
-Executes all 105 unit tests across Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6.
+Executes all 122 unit tests across Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, and Phase 7.

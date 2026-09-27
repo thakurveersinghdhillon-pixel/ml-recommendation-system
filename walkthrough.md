@@ -143,8 +143,44 @@ $$\text{Contribution} = S_{i, c} \times (r_{u, i} - \bar{r}_u)$$
 8. `ml/data/evaluation/plots/catalog_coverage.png`
 
 ### Test Verification
-All 105 unit tests pass cleanly:
+All 122 unit tests pass cleanly:
 ```bash
 python3 -m pytest ml/tests/
+```
+
+---
+
+## Phase 7 Walkthrough — FastAPI Backend Development
+
+### REST API Architecture & Lifespan Model Initialization
+- **Lifespan Context Manager**: Dataset loading and fitting for `ContentBasedRecommender`, `ItemBasedCollaborativeRecommender`, and `HybridRecommender` occur **once** at application startup (`lifespan` in `ml/api/main.py`). Models are stored in `app.state`.
+- **Dependency Injection**: Request handlers access ready models via `get_recommendation_service` dependency in `ml/api/dependencies.py`.
+- **Pydantic Validation**: Strict request/response validation rejecting negative IDs, out-of-range `top_k` ($1 \le top\_k \le 50$), invalid weight sums, and invalid JSON payloads.
+
+### Endpoint Smoke Verification Output
+```text
+Testing GET /api/v1/health...
+  Status Code: 200
+  Payload: {'status': 'healthy', 'service': 'movie-recommendation-api', 'models': {'content_based': 'ready', 'collaborative': 'ready', 'hybrid': 'ready'}}
+
+Testing GET /api/v1/movies/search?q=toy...
+  Status Code: 200
+  Payload: {'query': 'toy', 'total_matches': 8, 'limit': 3, 'movies': [{'movie_id': 3086, 'title': 'Babes in Toyland (1934)'}, ...]}
+
+Testing GET /api/v1/movies/1...
+  Status Code: 200
+  Payload: {'movie_id': 1, 'title': 'Toy Story (1995)', 'genres': ['Adventure', 'Animation', 'Children', 'Comedy', 'Fantasy'], 'year': 1995}
+
+Testing POST /api/v1/recommendations/content...
+  Status Code: 200
+  First Rec: Toy Story 2 (1999) Score: 0.7337
+
+Testing POST /api/v1/recommendations/collaborative...
+  Status Code: 200
+  First Rec: Entertaining Angels: The Dorothy Day Story (1996) Score: 0.6336
+
+Testing POST /api/v1/recommendations/hybrid...
+  Status Code: 200
+  First Rec: Entertaining Angels: The Dorothy Day Story (1996) Score: 0.5
 ```
 
