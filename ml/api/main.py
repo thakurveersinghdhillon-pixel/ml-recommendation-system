@@ -8,6 +8,7 @@ import pandas as pd
 
 from ml.api import config as api_config
 from ml.api.exceptions import register_exception_handlers
+from ml.api.middleware import RequestLoggingMiddleware
 from ml.api.routers import health, recommendations, movies, users, ratings
 from ml.src.content_based import ContentBasedRecommender
 from ml.src.collaborative_filtering import ItemBasedCollaborativeRecommender
@@ -16,13 +17,26 @@ from ml.src.hybrid_recommender import HybridRecommender
 from ml.api.database.base import Base
 from ml.api.database.session import engine
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Configure production-level logging format
+log_level = getattr(logging, api_config.LOG_LEVEL, logging.INFO)
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for initializing DB tables, loading datasets and fitting models at application startup."""
+    """Lifespan context manager for validating config, DB tables, loading datasets and fitting models at application startup."""
+    logger.info("Validating backend configuration...")
+    try:
+        api_config.validate_config()
+    except Exception as e:
+        logger.error("Configuration validation error: %s", str(e))
+        if api_config.ENV == "production":
+            raise e
+
     logger.info("Initializing database tables...")
     try:
         Base.metadata.create_all(bind=engine)
@@ -30,8 +44,6 @@ async def lifespan(app: FastAPI):
         logger.warning("Could not auto-create database tables on startup: %s", str(e))
 
     logger.info("Initializing FastAPI recommendation models during lifespan startup...")
-
-    
     try:
         movies_path = api_config.MOVIES_CSV_PATH
         ratings_path = api_config.RATINGS_CSV_PATH
@@ -90,10 +102,13 @@ def create_app() -> FastAPI:
         description=api_config.API_DESCRIPTION,
         version=api_config.API_VERSION,
         openapi_url=f"{api_config.API_V1_STR}/openapi.json",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url="/docs" if api_config.DEBUG or api_config.ENV != "production" else None,
+        redoc_url="/redoc" if api_config.DEBUG or api_config.ENV != "production" else None,
         lifespan=lifespan
     )
+
+    # Register non-sensitive request logging middleware
+    app.add_middleware(RequestLoggingMiddleware)
 
     # Configure CORS middleware
     app.add_middleware(
@@ -113,7 +128,6 @@ def create_app() -> FastAPI:
     app.include_router(movies.router, prefix=api_config.API_V1_STR)
     app.include_router(users.router, prefix=api_config.API_V1_STR)
     app.include_router(ratings.router, prefix=api_config.API_V1_STR)
-
 
     return app
 

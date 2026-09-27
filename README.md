@@ -347,9 +347,92 @@ Phase 9 implements a full-featured, responsive, production-ready Next.js web int
 
 ---
 
+## Phase 10 — Dockerization and Deployment Preparation
+
+Phase 10 containerizes the entire hybrid recommendation system stack into isolated, production-oriented Docker containers orchestrated with **Docker Compose**.
+
+```text
+                 USER
+                  |
+                  v
+          Next.js Frontend
+              Port 3000
+                  |
+                  | HTTP API requests
+                  v
+           FastAPI Backend
+              Port 8000
+                  |
+                  | SQLAlchemy (psycopg)
+                  v
+       PostgreSQL 16 Database
+              Port 5432 (Host: 5433)
+                  |
+                  v
+       Persistent Volume (ml_postgres_data)
+```
+
+### 1. Docker Architecture & Services
+* **`db` (`postgres:16-alpine`)**: Isolated PostgreSQL database container with healthcheck (`pg_isready`), non-root `ml_app` user, and persistent volume mount (`ml_postgres_data`). Host access configured on `127.0.0.1:5433` to prevent conflicts with native PostgreSQL installations.
+* **`backend` (`python:3.11-slim`)**: Production FastAPI container built from `docker/backend/Dockerfile`. Uses non-root `appuser`, runs Alembic database migrations (`alembic upgrade head`) automatically on startup via `entrypoint.sh`, and serves requests via Uvicorn.
+* **`frontend` (`node:20-alpine`)**: Multi-stage standalone build Next.js container built from `docker/frontend/Dockerfile`. Uses non-root `nextjs` user and serves optimized production pages on port 3000 via standalone Node.js server.
+
+### 2. Docker Commands & Operations
+
+```bash
+# Build production Docker images for all services
+docker compose build
+
+# Start containers in background (detached mode)
+docker compose up -d
+
+# Check status of running services & healthchecks
+docker compose ps
+
+# View and tail real-time container logs
+docker compose logs -f
+
+# Stop services safely (preserves database volumes)
+docker compose down
+```
+
+> [!CAUTION]
+> Running `docker compose down -v` permanently deletes the `ml_postgres_data` persistent volume and erases all database records. Use `-v` only when intentionally resetting database state.
+
+---
+
 ## Quickstart Instructions
 
-### 1. Setup Backend Environment (Python)
+### Option A: Docker Compose Quickstart (Recommended)
+
+1. **Configure Environment Variables**:
+   Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Build and Launch Application Stack**:
+   ```bash
+   docker compose build
+   docker compose up -d
+   ```
+
+3. **Access Services**:
+   - **Next.js Web Application**: `http://localhost:3000`
+   - **FastAPI REST API Base**: `http://localhost:8000`
+   - **Swagger Interactive API Docs**: `http://localhost:8000/docs`
+
+4. **Verify Health & Logs**:
+   ```bash
+   docker compose ps
+   curl http://localhost:8000/api/v1/health
+   ```
+
+---
+
+### Option B: Local Native Environment Setup
+
+#### 1. Setup Backend Environment (Python)
 
 **macOS / Linux:**
 ```bash
@@ -364,16 +447,13 @@ pip install -r ml/requirements.txt
 alembic upgrade head
 ```
 
-### 2. Start FastAPI REST API Backend
+#### 2. Start FastAPI REST API Backend
 
 ```bash
 uvicorn ml.api.main:app --reload --port 8000
 ```
 
-- API Base URL: `http://localhost:8000`
-- Swagger UI Documentation: `http://localhost:8000/docs`
-
-### 3. Setup and Run Next.js Frontend Application
+#### 3. Setup and Run Next.js Frontend Application
 
 ```bash
 # Navigate to frontend directory
@@ -386,9 +466,9 @@ npm install
 npm run dev
 ```
 
-- Web App Interface: `http://localhost:3000`
+---
 
-### 4. Running Verification Test Suites
+### Running Verification Test Suites
 
 ```bash
 # Run backend pytest suite (148 tests)
@@ -398,8 +478,78 @@ PYTHONPATH=. pytest ml/tests/
 cd frontend && npm test
 ```
 
-### 5. Running Offline Evaluation Pipeline (Phase 6)
+### Running Offline Evaluation Pipeline (Phase 6)
 
 ```bash
 python3 ml/scripts/run_evaluation.py
 ```
+
+---
+
+## Phase 12 — Cloud Deployment and Live Production Verification
+
+Phase 12 prepares and validates the cloud deployment specification for **Render** (and equivalent container hosting platforms) using Infrastructure-as-Code (`render.yaml`).
+
+```text
+                                USER BROWSER
+                                     |
+                                     v
+                 Next.js Standalone Frontend Web Service
+             (https://ml-recommendation-frontend.onrender.com)
+                                     |
+                                     | Public HTTPS REST Requests
+                                     v
+                   FastAPI ML Backend Web Service
+             (https://ml-recommendation-backend.onrender.com)
+                                     |
+                                     | Private Internal Network (SSL/TLS)
+                                     v
+                   Managed PostgreSQL 16 Database
+                  (movie-recommendations-db.render)
+```
+
+### 1. Render One-Click Deployment Steps
+
+1. **Connect Repository**:
+   - Push repository to GitHub or GitLab.
+   - Log into **Render** (`render.com`) and navigate to **Blueprints**.
+   - Select **New Blueprint Instance** and connect your repository.
+
+2. **Blueprint Provisioning**:
+   Render automatically parses `render.yaml` and provisions:
+   - **`movie-recommendations-db`**: Managed PostgreSQL 16 database with private internal networking.
+   - **`ml-recommendation-backend`**: FastAPI backend Docker service running `docker/backend/Dockerfile`. Executes Alembic migrations (`alembic upgrade head`) automatically on startup via `entrypoint.sh`.
+   - **`ml-recommendation-frontend`**: Next.js 14 frontend Docker service running `docker/frontend/Dockerfile`.
+
+3. **Verify Deployment & Health**:
+   - **Backend Health Check**: `GET https://ml-recommendation-backend.onrender.com/api/v1/health`
+   - **Frontend App**: `https://ml-recommendation-frontend.onrender.com`
+
+---
+
+### 2. Backup, Migration & Rollback Guidance
+
+- **Database Migrations**: Alembic migrations run automatically on container startup (`entrypoint.sh`). If a migration fails, the container exits safely with non-zero status code, preventing bad deployments.
+- **Manual Migration Trigger**:
+  ```bash
+  # Inside backend container shell or local connection:
+  alembic upgrade head
+  ```
+- **Database Backup**:
+  ```bash
+  # Export database snapshot from managed PostgreSQL:
+  pg_dump "$DATABASE_URL" > db_backup_$(date +%Y%m%m).sql
+  ```
+- **Database Rollback**:
+  ```bash
+  # Roll back single Alembic migration step:
+  alembic downgrade -1
+  ```
+
+---
+
+### 3. Hosting Tier Considerations & Limitations
+
+- **Cold Starts**: Render free tier instances automatically sleep after 15 minutes of inactivity. Initial requests after sleeping may take 30–50 seconds while the container initializes and fits ML recommendation models.
+- **Model In-Memory Storage**: Recommendation models are fitted in-memory during container lifespan startup from processed CSVs (`movies_processed.csv` and `ratings_processed.csv`).
+- **Internal Database Security**: Managed PostgreSQL database IP access list is restricted to Render internal services (`ipAllowList: []`). External host access requires explicit IP whitelisting or local SSH tunneling.

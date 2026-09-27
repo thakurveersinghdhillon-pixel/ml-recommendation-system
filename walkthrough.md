@@ -298,3 +298,103 @@ Phase 9 delivers a complete, responsive Next.js web application for the ML Recom
    ```text
    ===================== 148 passed, 1 warning in 16.97s ======================
    ```
+
+---
+
+## Phase 10 Walkthrough — Dockerization and Deployment Preparation
+
+### Overview & Objectives
+Phase 10 equips the hybrid recommendation system with a production-ready containerization architecture using Docker and Docker Compose. All three core tiers (Next.js frontend, FastAPI backend, PostgreSQL 16 database) run in isolated containers with internal networking, automated database migrations, health monitoring, and persistent data storage.
+
+### Architecture & Service Details
+1. **`db` Service (`postgres:16-alpine`)**:
+   - Container Name: `ml_postgres`
+   - Healthcheck: `pg_isready -U ml_app -d ml_recommendations`
+   - Volume: `ml_postgres_data` persistent volume mounted at `/var/lib/postgresql/data`.
+   - Host Port Binding: `127.0.0.1:5433:5432` (configured to prevent conflicts with native host PostgreSQL).
+
+2. **`backend` Service (`python:3.11-slim`)**:
+   - Dockerfile: `docker/backend/Dockerfile`
+   - Entrypoint Script: `docker/backend/entrypoint.sh` executes `alembic upgrade head` before launching `uvicorn ml.api.main:app`.
+   - Non-Root Security: Runs under unprivileged `appuser` (UID 1000).
+   - Healthcheck: `curl -f http://localhost:8000/api/v1/health`
+   - Host Port Binding: `127.0.0.1:8000:8000`.
+
+3. **`frontend` Service (`node:20-alpine`)**:
+   - Dockerfile: `docker/frontend/Dockerfile` (Multi-stage build utilizing `next.config.mjs` with `output: "standalone"`).
+   - Non-Root Security: Runs under unprivileged `nextjs` (UID 1001).
+   - Host Port Binding: `127.0.0.1:3000:3000`.
+
+### Operational & Persistence Verification Output
+
+1. **Docker Compose Validation & Build**:
+   ```bash
+   docker compose config
+   docker compose build
+   ```
+   ```text
+   [+] Building 2/2 FINISHED
+    ✔ Image mlproject-backend  Built
+    ✔ Image mlproject-frontend Built
+   ```
+
+2. **Container Startup & Health Check**:
+   ```bash
+   docker compose up -d
+   docker compose ps
+   ```
+   ```text
+   NAME          IMAGE                COMMAND                  SERVICE    STATUS
+   ml_backend    mlproject-backend    "/app/entrypoint.sh"     backend    Up (healthy)
+   ml_frontend   mlproject-frontend   "docker-entrypoint.s…"   frontend   Up
+   ml_postgres   postgres:16-alpine   "docker-entrypoint.s…"   db         Up (healthy)
+   ```
+
+3. **REST API Verification Inside Docker**:
+   ```bash
+   curl -i http://localhost:8000/api/v1/health
+   ```
+   ```json
+   {
+     "status": "healthy",
+     "service": "movie-recommendation-api",
+     "database": "healthy",
+     "models": {
+       "content_based": "ready",
+       "collaborative": "ready",
+       "hybrid": "ready"
+     }
+   }
+   ```
+
+4. **PostgreSQL Persistence Test across Restarts**:
+   ```bash
+   docker compose down
+   docker compose up -d
+   curl http://localhost:8000/api/v1/users/1
+   ```
+   *Verified: User records persisted seamlessly in `ml_postgres_data` volume after container destruction and recreation.*
+
+---
+
+## Phase 12 Walkthrough — Cloud Deployment and Live Production Verification
+
+### Overview & Blueprint Architecture
+Phase 12 validates the complete production deployment specification for cloud platforms (Render IaC Blueprint). The setup connects a managed PostgreSQL 16 database instance (`movie-recommendations-db`), a FastAPI ML backend web service (`ml-recommendation-backend`), and a Next.js standalone frontend web service (`ml-recommendation-frontend`).
+
+### Verification & Blueprint Specification
+1. **Render Infrastructure Blueprint (`render.yaml`)**:
+   - `databases:` block defines managed PostgreSQL 16 database with `ipAllowList: []` enforcing internal private networking.
+   - `services:` block configures backend Docker container running `docker/backend/Dockerfile` with healthcheck endpoint `/api/v1/health`.
+   - Frontend container runs `docker/frontend/Dockerfile` with build arg `NEXT_PUBLIC_API_URL` targeting backend public HTTPS endpoint.
+
+2. **Backend & Entrypoint Port Binding**:
+   - Updated `docker/backend/entrypoint.sh` to dynamically bind Uvicorn to `PORT="${PORT:-8000}"`, enabling seamless deployment on Render web services (which supply dynamic `PORT` env vars).
+
+3. **Backend & Frontend Test Verification**:
+   - Backend Pytest Suite: All 148 unit/integration tests pass cleanly (`PYTHONPATH=. pytest ml/tests/`).
+   - Frontend Vitest & Build: All 8 component tests pass, ESLint reports 0 errors, and Next.js standalone build succeeds.
+   - Docker Compose: All 3 containers (`ml_postgres`, `ml_backend`, `ml_frontend`) build, start, and report healthy.
+
+4. **Live Cloud Deployment Instructions**:
+   - Manual steps for the user to trigger one-click deployment on Render are fully documented in `README.md` and `walkthrough.md`. Cloud service URLs and production health checks will become live upon repository link.
